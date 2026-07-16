@@ -1,38 +1,52 @@
 #!/bin/bash
-
+# Build the Docker image, run rpi-image-gen inside it, then copy the .img out.
 set -eu
 
 BUILD_ID=${RANDOM}
 RPI_BUILD_SVC="rpi_imagegen"
 RPI_BUILD_USER="imagegen"
-RPI_CUSTOMIZATIONS_DIR="macmind"
-RPI_CONFIG="macmind"
-RPI_OPTIONS="macmind"
-RPI_IMAGE_NAME="macmind"
+
+# rpi-image-gen config to build (filename relative to the repo root,
+# resolved by rpi-image-gen's config search path)
+RPI_CONFIG="camera-ap.yaml"
+
+# Source directory containing the example layers and bdebstrap hooks
+RPI_SOURCE_DIR="/home/${RPI_BUILD_USER}/rpi-image-gen/examples/camera-ap"
+
+# image.name from config/camera-ap.yaml — determines the work/ subdirectory
+RPI_IMAGE_NAME="camera-ap-image"
+
+# Where to write the finished image on the host machine
+OUTPUT_DIR="$(pwd)/output"
+mkdir -p "${OUTPUT_DIR}"
 
 ensure_cleanup() {
-  echo "Cleanup containers..."
-
-  RPI_BUILD_SVC_CONTAINER_ID=$(docker ps -a --filter "name=${RPI_BUILD_SVC}-${BUILD_ID}" --format "{{.ID}}" | head -n 1) \
-    && docker kill ${RPI_BUILD_SVC_CONTAINER_ID} \
-    && docker rm ${RPI_BUILD_SVC_CONTAINER_ID}
-
-  echo "Cleanup complete."
+  echo "Cleaning up container..."
+  CID=$(docker ps -a --filter "name=${RPI_BUILD_SVC}-${BUILD_ID}" --format "{{.ID}}" | head -n 1)
+  if [ -n "${CID}" ]; then
+    docker kill "${CID}" 2>/dev/null || true
+    docker rm  "${CID}" 2>/dev/null || true
+  fi
 }
-
-# Set the trap to execute the ensure_cleanup function on EXIT
 trap ensure_cleanup EXIT
 
-# Build a customer raspberry pi image
-# with the wifi setup service included
-#
-echo "🔨 Building Docker image with rpi-image-gen to create ${RPI_BUILD_SVC}..."
+echo "🔨 Building Docker image (${RPI_BUILD_SVC})..."
 docker compose build ${RPI_BUILD_SVC}
 
-echo "🚀 Running image generation in container..."
-docker compose run --name ${RPI_BUILD_SVC}-${BUILD_ID} -d ${RPI_BUILD_SVC} \
-  && docker compose exec ${RPI_BUILD_SVC} bash -c "/home/${RPI_BUILD_USER}/rpi-image-gen/build.sh -D /home/${RPI_BUILD_USER}/${RPI_CUSTOMIZATIONS_DIR}/ -c ${RPI_CONFIG} -o /home/${RPI_BUILD_USER}/${RPI_CUSTOMIZATIONS_DIR}/${RPI_OPTIONS}.options" \
-  && CID=$(docker ps -a --filter "name=${RPI_BUILD_SVC}-${BUILD_ID}" --format "{{.ID}}" | head -n 1) \
-  && docker cp ${CID}:/home/${RPI_BUILD_USER}/rpi-image-gen/work/${RPI_IMAGE_NAME}/deploy/${RPI_IMAGE_NAME}.img ./${RPI_CUSTOMIZATIONS_DIR}/deploy/${RPI_IMAGE_NAME}-$(date +%m-%d-%Y-%H%M).img \
+echo "🚀 Running rpi-image-gen inside container..."
+docker compose run \
+  --name "${RPI_BUILD_SVC}-${BUILD_ID}" \
+  --rm \
+  "${RPI_BUILD_SVC}" \
+  bash -c "
+    cd /home/${RPI_BUILD_USER}/rpi-image-gen
+    ./rpi-image-gen build -S ${RPI_SOURCE_DIR} -c ${RPI_CONFIG}
+  "
 
-echo "🚀 Completed -> ${RPI_CUSTOMIZATIONS_DIR}/deploy/${RPI_IMAGE_NAME}-$(date +%m-%d-%Y-%H%M).img"
+echo "📦 Copying image to ${OUTPUT_DIR}..."
+CID=$(docker ps -a --filter "name=${RPI_BUILD_SVC}-${BUILD_ID}" --format "{{.ID}}" | head -n 1)
+docker cp \
+  "${CID}:/home/${RPI_BUILD_USER}/rpi-image-gen/work/${RPI_IMAGE_NAME}/deploy/${RPI_IMAGE_NAME}.img" \
+  "${OUTPUT_DIR}/${RPI_IMAGE_NAME}-$(date +%Y%m%d-%H%M).img"
+
+echo "✅ Done → ${OUTPUT_DIR}/${RPI_IMAGE_NAME}-$(date +%Y%m%d-%H%M).img"
