@@ -41,14 +41,17 @@ dhcp-option=option:dns-server,8.8.8.8,8.8.4.4
 EOF
 
 # --- systemd-networkd: static IP on wlan0 ---
+# rpi-device-base generates 02-wlan0.network (DHCP); we sort before it with 01-
+# and remove it so there's no ambiguity.
 mkdir -p "$1/etc/systemd/network"
-cat > "$1/etc/systemd/network/10-wlan0-ap.network" << EOF
+cat > "$1/etc/systemd/network/01-wlan0-ap.network" << EOF
 [Match]
 Name=wlan0
 
 [Network]
 Address=${IP}/24
 EOF
+rm -f "$1/etc/systemd/network/02-wlan0.network"
 
 # --- Mask iwd: trixie-minbase includes it but it conflicts with hostapd ---
 chroot "$1" systemctl mask iwd

@@ -1,5 +1,5 @@
 device:
-  layer: rpi5           # Change to rpi4, rpi3, rpizero2w, etc. as needed
+  layer: rpizero2w
   hostname: rpi-camera
   user1: pi
   user1pass: raspberry

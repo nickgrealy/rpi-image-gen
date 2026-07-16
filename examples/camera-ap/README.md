@@ -21,7 +21,7 @@ Change any of these in `config/camera-ap.yaml` under the `device:` and `env:` se
 
 ## Supported devices
 
-The default config targets **Raspberry Pi 5**. Change `device.layer` to match your hardware:
+The default config targets **Raspberry Pi Zero 2 W**. Change `device.layer` to match your hardware if needed:
 
 | Hardware | Layer value |
 |---|---|
@@ -102,6 +102,8 @@ Camera detection is automatic — the default firmware `config.txt` includes `ca
 | Camera | `rpicam-apps` | auto-detected via firmware |
 
 `iwd` (pulled in by the `trixie-minbase` suite) is masked at build time to prevent it from conflicting with `hostapd` on `wlan0`.
+
+The `rpi-device-base` layer auto-generates `02-wlan0.network` (DHCP) via a build hook. The AP hook writes `01-wlan0-ap.network` (static IP) which sorts earlier and wins, then removes the DHCP file to avoid ambiguity.
 
 ## Project structure
 
