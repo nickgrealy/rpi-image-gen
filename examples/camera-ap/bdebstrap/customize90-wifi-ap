@@ -1,0 +1,60 @@
+#!/bin/bash
+# Configure WiFi Access Point (hostapd), DHCP (dnsmasq), and static wlan0 IP.
+# iwd (pulled in by trixie-minbase) is masked to avoid conflict with hostapd.
+set -eu
+
+SSID="${AP_SSID:-rpi-ap}"
+PASSPHRASE="${AP_PASSPHRASE:-raspberry123}"
+CHANNEL="${AP_CHANNEL:-6}"
+IP="${AP_IP:-192.168.4.1}"
+DHCP_START="${AP_DHCP_RANGE_START:-192.168.4.2}"
+DHCP_END="${AP_DHCP_RANGE_END:-192.168.4.20}"
+DHCP_LEASE="${AP_DHCP_LEASE:-24h}"
+
+# --- hostapd ---
+mkdir -p "$1/etc/hostapd"
+cat > "$1/etc/hostapd/hostapd.conf" << EOF
+interface=wlan0
+driver=nl80211
+ssid=${SSID}
+hw_mode=g
+channel=${CHANNEL}
+ieee80211n=1
+wmm_enabled=1
+wpa=2
+wpa_passphrase=${PASSPHRASE}
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+EOF
+
+# Point the hostapd init script at our config
+echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' >> "$1/etc/default/hostapd"
+
+# --- dnsmasq DHCP for wlan0 ---
+mkdir -p "$1/etc/dnsmasq.d"
+cat > "$1/etc/dnsmasq.d/wlan0-ap.conf" << EOF
+interface=wlan0
+bind-interfaces
+dhcp-range=${DHCP_START},${DHCP_END},${DHCP_LEASE}
+dhcp-option=option:router,${IP}
+dhcp-option=option:dns-server,8.8.8.8,8.8.4.4
+EOF
+
+# --- systemd-networkd: static IP on wlan0 ---
+mkdir -p "$1/etc/systemd/network"
+cat > "$1/etc/systemd/network/10-wlan0-ap.network" << EOF
+[Match]
+Name=wlan0
+
+[Network]
+Address=${IP}/24
+EOF
+
+# --- Mask iwd: trixie-minbase includes it but it conflicts with hostapd ---
+chroot "$1" systemctl mask iwd
+
+# --- Enable AP services ---
+# hostapd ships masked in Debian; unmask before enabling
+chroot "$1" systemctl unmask hostapd
+chroot "$1" systemctl enable hostapd
+chroot "$1" systemctl enable dnsmasq

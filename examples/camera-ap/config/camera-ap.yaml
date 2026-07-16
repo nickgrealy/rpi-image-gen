@@ -1,0 +1,31 @@
+device:
+  layer: rpi5           # Change to rpi4, rpi3, rpizero2w, etc. as needed
+  hostname: rpi-camera
+  user1: pi
+  user1pass: raspberry
+
+image:
+  layer: image-rpios
+  boot_part_size: 256M
+  root_part_size: 2048M
+  name: camera-ap-image
+
+layer:
+  base: trixie-minbase
+
+ssh:
+  pubkey_only: n        # allow password login
+
+packages:
+  - hostapd
+  - dnsmasq
+  - rpicam-apps
+
+env:
+  AP_SSID: rpi-ap
+  AP_PASSPHRASE: raspberry123
+  AP_CHANNEL: "6"
+  AP_IP: 192.168.4.1
+  AP_DHCP_RANGE_START: 192.168.4.2
+  AP_DHCP_RANGE_END: 192.168.4.20
+  AP_DHCP_LEASE: 24h
